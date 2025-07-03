@@ -1,19 +1,49 @@
 # llm-chatlog
+> chrome extension chatlog downloader and issue tracker
 
-## 개요
+1. **downloader**
+2. **task-tracker**
 
-채팅로그 다운로드 크롬 확장프로그램 
-chrome extension chatlog downloader and issue tracker
+대화로그 다운로드 - tasktracker로 압축해서 다음 대화에 넣으면 됩니다.
 
-### claude-chat-logger 클로드용
 
-[다운로드 결과물 예시](_sample/2025-07-03_게시물_채팅로그_저장_v2.09.md)
+## downloader
 
-### gpt-chat-logger 지피티용 (제작중)
+- claude [사용예시👀](_sample/2025-07-03_게시물_채팅로그_저장_v2.09.md)
+- gpt (제작중)
 
----
 
-## 사용방법
+### 특징
+
+- 쿼리별 이모지 태그 자동분류
+- 키워드 추출하여 파일명 자동명명
+- 저장된 파일 상단에 대화 관련 키워드, Q&A쌍 갯수 포함
+- (불필요한 단어가 추출되는 문제가 있어 개선작업중)
+
+
+#### 아래와 같이 저장됩니다.
+
+thinking에 사용자가 입력한 내용을 요약정리한 내용이 주로 포함되길래 저장하는것이 좋은것 같아서 답변 뿐만 아니라 추론과정까지 저장되도록 했습니다.
+
+    ```markdown
+    # Q1. 이 게시물은 테스트용입니다!... ❓
+
+    ## 👤 Human: ❓
+        이 게시물은 테스트용입니다!
+
+    ## 🤖 Claude:
+
+    ### 💭 Thinking:
+
+    > 생각하고 있음: {추론 내용}
+    
+    ### 💬 Answer:
+        안녕하세요! 테스트 게시물을 확인했습니다. 
+    ```
+
+
+
+### 사용방법
 
 - 크롬 개발자모드 on
 - 압축해제된 확장프로그램 로드 클릭
@@ -21,14 +51,14 @@ chrome extension chatlog downloader and issue tracker
 - 저장하려고 하는 대화 페이지에서 F12 개발자모드 콘솔 열기
 - ctrl+s 하면 다운로드 폴더에 저장됩니다.
 
----
 
-# task-tracker
+## task-tracker
 
-## 개요
+### 개요
 
 저장된 대화로그에서 재사용할 질문-답변쌍만 남기고 완료된 항목은 요약처리
 
-제작: claude, 
-사용환경: gems 이용 추천 
-(클로드는 비용문제로 gemini에서도 원활하게 구동가능하도록 테스트중)
+    제작: claude, 
+    사용환경: gems 이용 추천 
+    (클로드는 비용문제로 gemini에서도 원활하게 구동가능하도록 수정중)
+
