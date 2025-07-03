@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Chat Logger",
+  "version": "1.0",
+  "description": "Claude 대화를 자동으로 저장합니다",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*"
+  ],
+  "content_scripts": [{
+    "matches": ["https://claude.ai/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}
