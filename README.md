@@ -1,10 +1,10 @@
 # llm-chatlog
 > chrome extension chatlog downloader and issue tracker
+> 
+> 대화로그 다운로드 - tasktracker로 압축해서 다음 대화에 넣으면 됩니다.
 
 1. **downloader**
 2. **task-tracker**
-
-대화로그 다운로드 - tasktracker로 압축해서 다음 대화에 넣으면 됩니다.
 
 
 ## downloader
