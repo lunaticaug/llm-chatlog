@@ -1,8 +1,13 @@
 (function() {
-  console.log('🎯 Claude Chat Logger v2.09 - 기본 빈도 차감 방식!');
+  console.log('🎯 Claude Chat Logger v2.11 - Mac/Windows 호환 + 2파일 동시저장!');
   
   // 전역 변수
   let DEBUG = true; // 디버그 모드
+  
+  // OS 감지
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modifierKey = isMac ? 'metaKey' : 'ctrlKey'; // Mac은 Cmd, Windows는 Ctrl
+  const modifierKeyName = isMac ? 'Cmd' : 'Ctrl';
   
   // 로그 함수
   function log(...args) {
@@ -386,7 +391,7 @@
     return '';
   }
   
-  // 주제/제목 생성 (v2.09 기본 빈도 차감 방식)
+  // 주제/제목 생성 (v2.11 Mac/Windows 호환 + 2파일 저장)
   function generateTitle(qaPairs) {
     // 확장된 stopWords (완전 제외 단어)
     const stopWords = [
@@ -565,11 +570,34 @@
     };
   }
   
+  // 질문만 마크다운 생성 (새 함수)
+  function generateQuestionsOnlyMarkdown(qaPairs) {
+    const date = new Date();
+    const dateStr = date.toLocaleString('ko-KR');
+    const version = 'v2.11';
+    
+    let markdown = `# Claude 질문 목록 - ${dateStr}\n\n`;
+    markdown += `## 📋 요약\n`;
+    markdown += `- **총 질문 수**: ${qaPairs.length}개\n`;
+    markdown += `- **일시**: ${dateStr}\n`;
+    markdown += `- **버전**: ${version}\n\n`;
+    markdown += `---\n\n`;
+    
+    // 질문들만 나열
+    qaPairs.forEach((qa) => {
+      markdown += `## Q${qa.index}.\n\n`;
+      markdown += qa.human + '\n\n';
+      markdown += `---\n\n`;
+    });
+    
+    return markdown;
+  }
+  
   // 마크다운 생성
   function generateMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v2.09'; // 버전 업데이트
+    const version = 'v2.11'; // 버전 업데이트
     
     let markdown = `# Claude 대화 - ${dateStr}\n\n`;
     
@@ -588,7 +616,8 @@
       }
     }
     markdown += `- **일시**: ${dateStr}\n`;
-    markdown += `- **버전**: ${version}\n\n`;
+    markdown += `- **버전**: ${version}\n`;
+    markdown += `- **플랫폼**: ${isMac ? 'Mac' : 'Windows'}\n\n`;
     markdown += `---\n\n`;
     
     // Q&A 쌍들
@@ -633,7 +662,7 @@
     return markdown;
   }
   
-  // 저장 함수
+  // 저장 함수 (2개 파일 동시 저장)
   function saveConversation() {
     log('=== 저장 시작 ===');
     
@@ -646,29 +675,48 @@
         return;
       }
       
-      const markdown = generateMarkdown(qaPairs);
+      // 전체 대화 마크다운
+      const fullMarkdown = generateMarkdown(qaPairs);
+      
+      // 질문만 마크다운
+      const questionsMarkdown = generateQuestionsOnlyMarkdown(qaPairs);
       
       // 개선된 제목으로 파일명 생성
       const { title } = generateTitle(qaPairs);
-      
-      // 다운로드
-      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      
       const date = new Date().toISOString().split('T')[0];
       const safeTitle = title.substring(0, 50).replace(/[^가-힣a-zA-Z0-9_]/g, '');
-      const filename = `${date}_${safeTitle}_v2.09.md`;
       
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // 파일 1: 전체 대화 저장
+      const fullBlob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
+      const fullUrl = URL.createObjectURL(fullBlob);
+      const fullFilename = `${date}_${safeTitle}_full_v2.11.md`;
       
-      URL.revokeObjectURL(url);
+      const a1 = document.createElement('a');
+      a1.href = fullUrl;
+      a1.download = fullFilename;
+      document.body.appendChild(a1);
+      a1.click();
+      document.body.removeChild(a1);
       
-      showToast(`✅ ${qaPairs.length}개 Q&A 저장 완료!`);
+      // 파일 2: 질문만 저장 (약간의 지연을 두고)
+      setTimeout(() => {
+        const questionsBlob = new Blob([questionsMarkdown], { type: 'text/markdown;charset=utf-8' });
+        const questionsUrl = URL.createObjectURL(questionsBlob);
+        const questionsFilename = `${date}_${safeTitle}_questions_v2.11.md`;
+        
+        const a2 = document.createElement('a');
+        a2.href = questionsUrl;
+        a2.download = questionsFilename;
+        document.body.appendChild(a2);
+        a2.click();
+        document.body.removeChild(a2);
+        
+        URL.revokeObjectURL(questionsUrl);
+      }, 100); // 100ms 지연
+      
+      URL.revokeObjectURL(fullUrl);
+      
+      showToast(`✅ ${qaPairs.length}개 Q&A 2개 파일로 저장 완료!`);
       
     } catch (error) {
       logError('004', '저장 중 오류', error);
@@ -702,22 +750,30 @@
     setTimeout(() => toast.remove(), 3000);
   }
   
-  // 단축키 등록
+  // 단축키 등록 - Mac/Windows 호환
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 's') {
+    // 저장 단축키 (Mac: Cmd+S, Windows: Ctrl+S)
+    if (e[modifierKey] && e.key === 's') {
       e.preventDefault();
       saveConversation();
     }
-  });
-  
-  // 디버그 토글
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+    
+    // 디버그 토글 (Mac: Cmd+Shift+D, Windows: Ctrl+Shift+D)
+    if (e[modifierKey] && e.shiftKey && e.key === 'D') {
       e.preventDefault();
       DEBUG = !DEBUG;
       showToast(`디버그 모드: ${DEBUG ? 'ON' : 'OFF'}`);
     }
   });
   
-  log('준비 완료! Ctrl+S로 저장, Ctrl+Shift+D로 디버그 토글');
+  // 초기화 메시지
+  const platform = isMac ? 'Mac' : 'Windows';
+  const saveShortcut = `${modifierKeyName}+S`;
+  const debugShortcut = `${modifierKeyName}+Shift+D`;
+  
+  log(`준비 완료! ${platform} 환경 감지됨`);
+  log(`${saveShortcut}로 저장 (전체 대화 + 질문만 2개 파일), ${debugShortcut}로 디버그 토글`);
+  
+  // 최초 실행 시 안내 메시지
+  showToast(`Claude Chat Logger 활성화! ${saveShortcut}로 2개 파일 저장`);
 })();
