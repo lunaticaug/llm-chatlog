@@ -1,5 +1,5 @@
 (function() {
-  console.log('🎯 LLM Chat Logger v3.1.3 - DOM 순서 보존 개선!');
+  console.log('🎯 LLM Chat Logger v3.1.5 - 단순화된 Level 기반 추출!');
   
   // ===== 전역 변수 =====
   let DEBUG = true;
@@ -151,13 +151,15 @@
         break;
       }
       
-      // 새로운 추출 방식 사용
-      const assistantData = extractAssistantContent(assistantDiv);
+      // 아바타 제거는 각 추출 함수 내부에서 처리
+      
+      // 새로운 top-down 추출 방식 사용
+      const assistantData = extractAssistantContentTopDown(assistantDiv);
       
       const qa = {
         index: Math.floor(i / currentSite.pattern.increment) + 1,
         human: extractContent(humanDiv, 'human'),
-        contents: assistantData.contents  // 순서 그대로 유지
+        contents: assistantData.contents
       };
       
       qaPairs.push(qa);
@@ -333,121 +335,271 @@
     return markdown;
   }
   
-  // ===== Assistant 콘텐츠 분리 추출 =====
-  function extractAssistantContent(element) {
+  // ===== 말풍선 레벨에서 아바타 제거 =====
+  function removeAvatarFromBubble(bubbleElement) {
+    if (!bubbleElement) return;
+    
+    // 아바타 컨테이너 제거 (Level 1)
+    const avatarContainers = bubbleElement.querySelectorAll('.shrink-0');
+    avatarContainers.forEach(container => {
+      // 원형 아바타 포함 확인
+      const hasAvatar = container.querySelector('.rounded-full');
+      if (hasAvatar) {
+        container.remove();
+      }
+    });
+  }
+  
+  // ===== 단순화된 Assistant 콘텐츠 추출 =====
+  function extractAssistantContentTopDown(element) {
     if (!element) return { contents: [] };
     
     const extractConfig = currentSite.extraction;
     const contents = [];
     
-    // 복제해서 작업
-    const clone = element.cloneNode(true);
+    // Step 1: Level 1까지만 해체 (직계 자식들)
+    const sections = Array.from(element.children);
+    log(`Assistant 메시지 Level 1 섹션 수: ${sections.length}`);
     
-    // 1단계: DOM을 수정하지 않고 모든 노드 정보 수집
-    const nodes = [];
+    // Step 2: 각 섹션을 element로 저장
+    const elements = sections.map((section, index) => ({
+      type: identifyElementType(section, extractConfig),
+      element: section,
+      order: index
+    }));
     
-    // DOM 순회하며 노드 수집 (수정 없이)
-    const collectNodes = (node, depth = 0) => {
-      // Thinking 블록 체크
-      if (extractConfig?.thinking?.enabled && 
-          node.matches && 
-          node.matches(extractConfig.thinking.containerSelector)) {
-        
-        nodes.push({
-          type: 'thinking',
-          element: node,
-          depth: depth
-        });
-        
-        // Thinking 내부는 더 이상 순회하지 않음
-        return;
-      }
+    // Step 3: 각 element별로 처리
+    elements.forEach(item => {
+      log(`섹션[${item.order}] 타입: ${item.type}`);
       
-      // 텍스트 콘텐츠가 있는 요소 체크
-      const hasTextContent = node.textContent && node.textContent.trim();
-      const isContentElement = node.tagName === 'P' || node.tagName === 'DIV' || node.tagName === 'SPAN';
+      // 복제본에서 작업
+      const clone = item.element.cloneNode(true);
       
-      if (hasTextContent && isContentElement && node.children.length === 0) {
-        // 리프 노드로 텍스트가 있는 경우
-        nodes.push({
-          type: 'content',
-          element: node,
-          depth: depth
-        });
-      }
+      // UI 요소 제거 (각 element 내부에서만)
+      removeUIElements(clone);
       
-      // 자식 노드 재귀 순회
-      if (node.children && node.children.length > 0) {
-        Array.from(node.children).forEach(child => {
-          collectNodes(child, depth + 1);
-        });
-      }
-    };
-    
-    // 최상위부터 수집 시작
-    Array.from(clone.children).forEach(child => {
-      collectNodes(child, 0);
-    });
-    
-    // 2단계: 수집된 노드들을 순서대로 처리
-    const processedThinking = new Set(); // 처리된 Thinking 블록 추적
-    
-    nodes.forEach(nodeInfo => {
-      if (nodeInfo.type === 'thinking') {
-        // Thinking 콘텐츠 추출
-        let contentElement = null;
-        const node = nodeInfo.element;
-        
-        // 1. 숨겨진 상태 (접힌 상태)
-        const hiddenContent = node.querySelector(extractConfig.thinking.hiddenContentSelector);
-        if (hiddenContent) {
-          contentElement = hiddenContent.querySelector(extractConfig.thinking.contentSelector);
+      // 타입별 처리
+      if (item.type === 'thinking') {
+        // Thinking 내용 추출
+        const content = extractThinkingContent(clone, extractConfig);
+        if (content) {
+          contents.push({
+            type: CONTENT_TYPES.THINKING,
+            content: content
+          });
         }
-        
-        // 2. 펼쳐진 상태
-        if (!contentElement) {
-          const expandedContent = node.querySelector('.overflow-hidden:not([style*="height: 0"])');
-          if (expandedContent) {
-            contentElement = expandedContent.querySelector(extractConfig.thinking.contentSelector);
-          }
-        }
-        
-        if (contentElement) {
-          const thinkingContent = extractContent(contentElement, 'thinking');
-          if (thinkingContent.trim()) {
+      } else if (item.type === 'content') {
+        // 일반 콘텐츠는 마크다운 변환
+        const content = convertToMarkdownFull(clone);
+        if (content.trim()) {
+          // 이미 Answer가 있으면 합치기
+          const lastContent = contents[contents.length - 1];
+          if (lastContent && lastContent.type === CONTENT_TYPES.ANSWER) {
+            lastContent.content += '\n\n' + content.trim();
+          } else {
             contents.push({
-              type: CONTENT_TYPES.THINKING,
-              content: thinkingContent
+              type: CONTENT_TYPES.ANSWER,
+              content: content.trim()
             });
-            processedThinking.add(node);
-          }
-        }
-      } else if (nodeInfo.type === 'content') {
-        // Thinking의 자식이 아닌지 확인
-        const isThinkingChild = Array.from(processedThinking).some(thinkingNode => 
-          thinkingNode.contains(nodeInfo.element)
-        );
-        
-        if (!isThinkingChild) {
-          const content = nodeInfo.element.textContent.trim();
-          if (content) {
-            // 이미 추가된 Answer와 합칠 수 있는지 확인
-            const lastContent = contents[contents.length - 1];
-            if (lastContent && lastContent.type === CONTENT_TYPES.ANSWER) {
-              // 같은 깊이의 연속된 content는 합치기
-              lastContent.content += '\n\n' + content;
-            } else {
-              contents.push({
-                type: CONTENT_TYPES.ANSWER,
-                content: content
-              });
-            }
           }
         }
       }
     });
     
     return { contents };
+  }
+  
+  // ===== Element 타입 식별 =====
+  function identifyElementType(element, config) {
+    // Thinking 패턴 체크
+    if (config?.thinking?.enabled && 
+        element.matches && 
+        element.matches(config.thinking.containerSelector)) {
+      return 'thinking';
+    }
+    
+    // 텍스트 콘텐츠가 있으면 content
+    if (element.textContent && element.textContent.trim()) {
+      return 'content';
+    }
+    
+    return 'unknown';
+  }
+  
+  // ===== Thinking 콘텐츠 추출 (단순화) =====
+  function extractThinkingContent(element, config) {
+    // 직접 텍스트 찾기 또는 깊이 2-3단계까지만
+    let contentElement = element.querySelector(config.thinking.contentSelector);
+    
+    if (!contentElement) {
+      // 대체 선택자들 시도
+      contentElement = element.querySelector('.font-claude-response') ||
+                      element.querySelector('.overflow-hidden p') ||
+                      element.querySelector('p');
+    }
+    
+    if (contentElement) {
+      return extractContent(contentElement, 'thinking');
+    }
+    
+    // 못 찾으면 전체 텍스트
+    return element.textContent.trim();
+  }
+  
+  
+  // ===== 확장된 HTML → 마크다운 변환 (모든 태그 지원) =====
+  function convertToMarkdownFull(element) {
+    let markdown = '';
+    
+    function processNode(node, listContext = null) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent;
+        if (!isUIText(text.trim())) {
+          markdown += text;
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = node.tagName.toLowerCase();
+        
+        switch(tag) {
+          case 'p':
+            processChildren(node);
+            markdown += '\n\n';
+            break;
+          
+          case 'br':
+            markdown += '\n';
+            break;
+          
+          case 'h1':
+          case 'h2':
+          case 'h3':
+          case 'h4':
+          case 'h5':
+          case 'h6':
+            const level = parseInt(tag[1]);
+            markdown += '\n' + '#'.repeat(level) + ' ';
+            processChildren(node);
+            markdown += '\n\n';
+            break;
+          
+          case 'ul':
+          case 'ol':
+            markdown += '\n';
+            const items = node.querySelectorAll(':scope > li');
+            items.forEach((li, idx) => {
+              if (tag === 'ul') {
+                markdown += '- ';
+              } else {
+                markdown += `${idx + 1}. `;
+              }
+              processChildren(li);
+              markdown += '\n';
+            });
+            markdown += '\n';
+            break;
+          
+          case 'li':
+            // 리스트 컨텍스트가 없을 때만 (중첩 방지)
+            if (!listContext) {
+              markdown += '- ';
+              processChildren(node);
+              markdown += '\n';
+            }
+            break;
+          
+          case 'blockquote':
+            const lines = [];
+            const tempMd = markdown;
+            markdown = '';
+            processChildren(node);
+            const quotedText = markdown;
+            markdown = tempMd;
+            
+            quotedText.split('\n').forEach(line => {
+              if (line.trim()) {
+                markdown += '> ' + line + '\n';
+              }
+            });
+            markdown += '\n';
+            break;
+          
+          case 'pre':
+            // pre 태그는 preserveCodeBlocks에서 처리됨
+            processChildren(node);
+            break;
+          
+          case 'code':
+            // 인라인 코드는 preserveCodeBlocks에서 처리됨
+            if (!node.parentElement || node.parentElement.tagName !== 'PRE') {
+              processChildren(node);
+            }
+            break;
+          
+          case 'strong':
+          case 'b':
+            markdown += '**';
+            processChildren(node);
+            markdown += '**';
+            break;
+          
+          case 'em':
+          case 'i':
+            markdown += '*';
+            processChildren(node);
+            markdown += '*';
+            break;
+          
+          case 'a':
+            markdown += '[';
+            processChildren(node);
+            markdown += `](${node.href || '#'})`;
+            break;
+          
+          case 'img':
+            const alt = node.alt || 'image';
+            const src = node.src || '#';
+            markdown += `![${alt}](${src})`;
+            break;
+          
+          case 'hr':
+            markdown += '\n---\n\n';
+            break;
+          
+          case 'table':
+            // 기본 테이블 처리
+            markdown += '\n';
+            processChildren(node);
+            markdown += '\n';
+            break;
+          
+          case 'div':
+          case 'span':
+          case 'section':
+          case 'article':
+            processChildren(node);
+            if (tag === 'div' && node.nextSibling) {
+              markdown += '\n\n';
+            }
+            break;
+          
+          default:
+            processChildren(node);
+        }
+      }
+    }
+    
+    function processChildren(node, listContext = null) {
+      Array.from(node.childNodes).forEach(child => {
+        processNode(child, listContext);
+      });
+    }
+    
+    processNode(element);
+    
+    // 과도한 줄바꿈 정리
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+    
+    return markdown;
   }
   
   
@@ -548,7 +700,7 @@
   function generateMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.1.3';
+    const version = 'v3.1.5';
     
     let markdown = `# ${currentSite.name} 대화 - ${dateStr}\n\n`;
     
@@ -630,7 +782,7 @@
   function generateQuestionsOnlyMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.1.3';
+    const version = 'v3.1.5';
     
     let markdown = `# ${currentSite.name} 질문 목록 - ${dateStr}\n\n`;
     markdown += `## 📋 요약\n`;
@@ -672,7 +824,7 @@
       // 파일 1: 전체 대화
       const fullBlob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
       const fullUrl = URL.createObjectURL(fullBlob);
-      const fullFilename = `${date}_${safeTitle}_full_v3.1.3.md`;
+      const fullFilename = `${date}_${safeTitle}_full_v3.1.5.md`;
       
       const a1 = document.createElement('a');
       a1.href = fullUrl;
@@ -685,7 +837,7 @@
       setTimeout(() => {
         const questionsBlob = new Blob([questionsMarkdown], { type: 'text/markdown;charset=utf-8' });
         const questionsUrl = URL.createObjectURL(questionsBlob);
-        const questionsFilename = `${date}_${safeTitle}_questions_v3.1.3.md`;
+        const questionsFilename = `${date}_${safeTitle}_questions_v3.1.5.md`;
         
         const a2 = document.createElement('a');
         a2.href = questionsUrl;
