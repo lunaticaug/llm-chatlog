@@ -3,22 +3,43 @@
 > 
 > 대화로그 다운로드 - tasktracker로 압축해서 다음 대화에 넣으면 됩니다.
 
-1. **downloader**
-2. **task-tracker**
+## 프로젝트 구조
+
+```
+llm-chatlog/
+├── claude-chat-logger/     # v2.11 (현재 안정 버전)
+│   ├── manifest.json
+│   └── content.js
+├── llm-chat-logger/        # v3.0 (개발 버전)
+│   ├── manifest.json
+│   ├── content.js          # 메인 로직
+│   ├── sites.js            # 플랫폼별 DOM 구조
+│   └── keywords.js         # 한국어 처리
+└── _sample/                # 출력 예시
+
+```
+
+## Components
+
+1. **downloader** - 대화 내용 추출 및 저장
+2. **task-tracker** - 저장된 로그 압축 및 재사용
 
 
 ## downloader
 
-- claude [사용예시👀](_sample/2025-07-03_게시물_채팅로그_저장_v2.09.md)
-- gpt (제작중)
+### 지원 플랫폼
+
+- **claude** ✅ v2.11 [사용예시👀](_sample/2025-07-03_게시물_채팅로그_저장_v2.09.md)
+- **gpt** 🚧 v3.0에서 지원 예정
 
 
 ### 특징
 
 - 쿼리별 이모지 태그 자동분류
-- 키워드 추출하여 파일명 자동명명
+- 키워드 추출하여 파일명 자동명명  
 - 저장된 파일 상단에 대화 관련 키워드, Q&A쌍 갯수 포함
-- (불필요한 단어가 추출되는 문제가 있어 개선작업중)
+- v2.11: Mac/Windows 호환, 2개 파일 동시 저장 (전체 대화 + 질문만)
+- v3.0: 멀티 플랫폼 지원 구조 (개발중)
 
 
 #### 아래와 같이 저장됩니다.
@@ -46,11 +67,16 @@ thinking에 사용자가 입력한 내용을 요약정리한 내용이 주로 �
 
 ### 사용방법
 
+#### v2.11 (안정 버전)
 - 크롬 개발자모드 on
 - 압축해제된 확장프로그램 로드 클릭
-- claude-chat-logger 폴더 업로드
-- 저장하려고 하는 대화 페이지에서 F12 개발자모드 콘솔 열기
-- ctrl+s 하면 다운로드 폴더에 저장됩니다.
+- `claude-chat-logger` 폴더 선택
+- Claude 대화 페이지에서 F12 개발자모드 콘솔 열기
+- `Ctrl+S` (Windows) 또는 `Cmd+S` (Mac)로 저장
+
+#### v3.0 (개발 버전)
+- 위와 동일하나 `llm-chat-logger` 폴더 선택
+- Claude 및 ChatGPT 지원 예정
 
 
 ## task-tracker

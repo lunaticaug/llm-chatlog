@@ -1,3 +1,5 @@
 .DS_Store
 *_files/
 *.zip
+CLAUDE.md
+_log/*

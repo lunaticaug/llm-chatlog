@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "LLM Chat Logger",
+  "version": "3.0.0",
+  "description": "LLM(Claude, ChatGPT) 대화를 자동으로 저장합니다",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "content_scripts": [{
+    "matches": [
+      "https://claude.ai/*",
+      "https://chatgpt.com/*",
+      "https://chat.openai.com/*"
+    ],
+    "js": [
+      "sites.js",
+      "keywords.js",
+      "content.js"
+    ],
+    "run_at": "document_idle"
+  }]
+}
