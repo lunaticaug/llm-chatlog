@@ -1,7 +1,7 @@
 (function() {
   // ===== 버전 정보 =====
-  const VERSION = 'v3.1.9';
-  const VERSION_DESC = 'v3.1.3 기반 + 마크다운 보존';
+  const VERSION = 'v3.1.10';
+  const VERSION_DESC = 'Thinking 들여쓰기 변경';
   
   console.log(`🎯 LLM Chat Logger ${VERSION} - ${VERSION_DESC}!`);
   
@@ -808,9 +808,10 @@
         
         qa.contents.forEach((item, idx) => {
           if (item.type === CONTENT_TYPES.THINKING) {
-            markdown += `> ### 💭 Thinking:\n`;
-            const thinkingLines = item.content.split('\n').map(line => '> ' + line).join('\n');
-            markdown += thinkingLines + '\n\n';
+            // Thinking 헤더와 들여쓰기
+            markdown += `### 💭 Thinking:\n\n`;
+            const thinkingIndented = item.content.split('\n').map(line => '\t' + line).join('\n');
+            markdown += thinkingIndented + '\n\n';
             lastWasThinking = true;
             
           } else if (item.type === CONTENT_TYPES.ANSWER) {
@@ -825,8 +826,8 @@
               lastWasThinking = false;
               
             } else if (lastWasThinking) {
-              // 짧은 Answer가 Thinking 바로 뒤에 오면 인용 블록 안에
-              markdown += `> ${item.content}\n\n`;
+              // 짧은 Answer가 Thinking 바로 뒤에 와도 일반 텍스트로
+              markdown += `${item.content}\n\n`;
               
             } else {
               // 그 외 짧은 Answer는 일반 텍스트로

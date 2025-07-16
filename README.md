@@ -51,6 +51,7 @@ llm-chatlog/
   - v3.1.7: 코드 블록 복원 수정 (convertToMarkdownFull)
   - v3.1.8: DOM 구조 재분석 (Level 2 감지 추가)
   - v3.1.9: v3.1.3 기반 + 마크다운 보존 (grid-cols-1 감지)
+  - v3.1.10: Thinking 블록 들여쓰기 변경 (> → tab)
 
 
 #### 아래와 같이 저장됩니다.
