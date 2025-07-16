@@ -1,7 +1,7 @@
 (function() {
   // ===== 버전 정보 =====
-  const VERSION = 'v3.1.10';
-  const VERSION_DESC = 'Thinking 들여쓰기 변경';
+  const VERSION = 'v3.1.11';
+  const VERSION_DESC = '탭 제목 우선 사용 (키워드 추출 폴백)';
   
   console.log(`🎯 LLM Chat Logger ${VERSION} - ${VERSION_DESC}!`);
   
@@ -671,6 +671,25 @@
   
   // ===== 키워드 추출 =====
   function generateTitle(qaPairs) {
+    // 1. 먼저 브라우저 탭 제목 확인
+    let tabTitle = '';
+    try {
+      tabTitle = document.title
+        .replace(/[\\/:"*?<>|]/g, '') // 파일명 금지 문자 제거
+        .replace(/^(Claude|ChatGPT|Gemini)\s*[-–—]\s*/i, '') // LLM 이름 prefix 제거
+        .trim();
+      
+      // 탭 제목이 충분히 의미있는지 확인 (5글자 이상)
+      if (tabTitle && tabTitle.length > 5) {
+        log(`탭 제목 사용: "${tabTitle}"`);
+      } else {
+        tabTitle = ''; // 너무 짧으면 사용하지 않음
+      }
+    } catch (e) {
+      log('탭 제목 가져오기 실패:', e);
+    }
+    
+    // 2. 키워드 추출 (폴백용)
     const keywords = {};
     
     qaPairs.forEach(qa => {
@@ -717,18 +736,32 @@
     // 요약용 상위 15개
     const summaryKeywords = sortedKeywords.slice(0, 15).map(([word]) => word);
     
-    // 제목 생성
+    // 3. 최종 제목 결정 (탭 제목 우선)
     let title = '';
-    if (topKeywords.length > 0) {
+    if (tabTitle) {
+      // 탭 제목이 있으면 우선 사용
+      title = tabTitle;
+      // 키워드가 있으면 보조 정보로 추가 (선택사항)
+      // if (topKeywords.length > 0) {
+      //   title = `${tabTitle}_${topKeywords[0]}`;
+      // }
+    } else if (topKeywords.length > 0) {
+      // 탭 제목이 없으면 키워드 사용
       title = topKeywords.join('_');
     } else {
+      // 둘 다 없으면 첫 질문 일부 사용
       const firstTopic = qaPairs[0]?.human.substring(0, 30).replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim() || '';
       title = firstTopic || 'LLM_Chat';
     }
     
-    // 주제 설명
+    // 4. 주제 설명 (요약용)
     let subject = '';
-    if (topKeywords.length > 0) {
+    if (tabTitle) {
+      subject = tabTitle;
+      if (topKeywords.length > 0) {
+        subject += ` (${topKeywords.join(', ')})`;
+      }
+    } else if (topKeywords.length > 0) {
       subject = `${topKeywords.join(', ')} 관련 대화`;
     } else {
       subject = qaPairs[0]?.human.substring(0, 50).replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim() || 'LLM과의 대화';
