@@ -45,7 +45,19 @@ const SITES = {
       /^Retry$/,
       /^재시도$/,
       /^\d+\s?(초|분|시간|일)$/
-    ]
+    ],
+    
+    // 콘텐츠 추출 설정
+    extraction: {
+      thinking: {
+        enabled: true,
+        containerSelector: '.transition-all.duration-400.rounded-lg.border-0\\.5',
+        hiddenContentSelector: '.overflow-hidden[style*="height: 0"]',
+        contentSelector: '.font-claude-response',
+        summarySelector: '.text-text-300'  // "Analyzed..." 요약 텍스트
+      },
+      mergeThreshold: 100  // 100자 이하 answer는 thinking에 병합
+    }
   }
 };
 

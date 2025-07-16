@@ -1,5 +1,5 @@
 (function() {
-  console.log('🎯 LLM Chat Logger v3.0.1 - 다중 플랫폼 지원!');
+  console.log('🎯 LLM Chat Logger v3.1.2 - Thinking/Answer 분리 + 순서 보존!');
   
   // ===== 전역 변수 =====
   let DEBUG = true;
@@ -9,6 +9,14 @@
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const modifierKey = isMac ? 'metaKey' : 'ctrlKey';
   const modifierKeyName = isMac ? 'Cmd' : 'Ctrl';
+  
+  // ===== 콘텐츠 타입 정의 =====
+  const CONTENT_TYPES = {
+    THINKING: 'thinking',
+    ANSWER: 'answer',
+    SEARCH: 'search',     // 향후 확장
+    TOOL: 'tool'          // 향후 확장
+  };
   
   // ===== 유틸리티 함수 =====
   function log(...args) {
@@ -143,11 +151,13 @@
         break;
       }
       
+      // 새로운 추출 방식 사용
+      const assistantData = extractAssistantContent(assistantDiv);
+      
       const qa = {
         index: Math.floor(i / currentSite.pattern.increment) + 1,
         human: extractContent(humanDiv, 'human'),
-        assistant: extractContent(assistantDiv, 'assistant'),
-        thinking: extractThinking(assistantDiv)
+        contents: assistantData.contents  // 순서 그대로 유지
       };
       
       qaPairs.push(qa);
@@ -323,47 +333,80 @@
     return markdown;
   }
   
-  // ===== Thinking 추출 (Claude 전용) =====
-  function extractThinking(element) {
-    if (!element || !currentSite.special?.thinking) return [];
+  // ===== Assistant 콘텐츠 분리 추출 =====
+  function extractAssistantContent(element) {
+    if (!element) return { contents: [] };
     
-    const thinkingTexts = [];
-    const thinkingConfig = currentSite.special.thinking;
+    const extractConfig = currentSite.extraction;
+    const contents = [];
     
-    // "생각하고 있음:" 찾기
-    const indicators = element.querySelectorAll(thinkingConfig.indicator);
-    indicators.forEach(span => {
-      if (span.textContent.includes(thinkingConfig.indicatorText)) {
-        thinkingTexts.push(span.textContent);
-      }
-    });
+    // 복제해서 작업
+    const clone = element.cloneNode(true);
     
-    // 사고 과정 내용 찾기
-    const contents = element.querySelectorAll(thinkingConfig.content);
-    contents.forEach(p => {
-      const text = p.textContent.trim();
-      if (text && text.length > 20) {
-        // 부모 요소에 thinking 관련 텍스트가 있는지 확인
-        let parent = p.parentElement;
-        let isThinkingContent = false;
+    // 모든 자식 요소들을 순서대로 처리
+    const processNode = (node) => {
+      // Thinking 블록인지 확인
+      if (extractConfig?.thinking?.enabled && 
+          node.matches && 
+          node.matches(extractConfig.thinking.containerSelector)) {
         
-        while (parent && parent !== element) {
-          if (parent.textContent.includes(thinkingConfig.indicatorText) || 
-              parent.textContent.includes(thinkingConfig.expandedText)) {
-            isThinkingContent = true;
-            break;
+        // Thinking 콘텐츠 추출
+        let contentElement = null;
+        
+        // 1. 숨겨진 상태 (접힌 상태)
+        const hiddenContent = node.querySelector(extractConfig.thinking.hiddenContentSelector);
+        if (hiddenContent) {
+          contentElement = hiddenContent.querySelector(extractConfig.thinking.contentSelector);
+        }
+        
+        // 2. 펼쳐진 상태
+        if (!contentElement) {
+          const expandedContent = node.querySelector('.overflow-hidden:not([style*="height: 0"])');
+          if (expandedContent) {
+            contentElement = expandedContent.querySelector(extractConfig.thinking.contentSelector);
           }
-          parent = parent.parentElement;
         }
         
-        if (isThinkingContent) {
-          thinkingTexts.push(text);
+        if (contentElement) {
+          const thinkingContent = extractContent(contentElement, 'thinking');
+          if (thinkingContent.trim()) {
+            contents.push({
+              type: CONTENT_TYPES.THINKING,
+              content: thinkingContent
+            });
+          }
         }
+        
+        // Thinking 블록은 처리했으므로 제거
+        node.remove();
+        
+      } else if (node.children && node.children.length > 0) {
+        // 자식 노드들을 재귀적으로 처리
+        Array.from(node.children).forEach(child => processNode(child));
       }
-    });
+    };
     
-    return thinkingTexts;
+    // 모든 자식 처리
+    Array.from(clone.children).forEach(child => processNode(child));
+    
+    // 남은 콘텐츠를 Answer로 처리
+    const remainingContent = extractContent(clone, 'assistant');
+    if (remainingContent.trim()) {
+      // Answer 내용을 적절히 분할 (단락 기준)
+      const paragraphs = remainingContent.split(/\n\n+/);
+      paragraphs.forEach(para => {
+        if (para.trim()) {
+          contents.push({
+            type: CONTENT_TYPES.ANSWER,
+            content: para.trim()
+          });
+        }
+      });
+    }
+    
+    return { contents };
   }
+  
   
   // ===== 키워드 추출 =====
   function generateTitle(qaPairs) {
@@ -371,7 +414,14 @@
     
     qaPairs.forEach(qa => {
       extractKeywords(qa.human, keywords, 2);  // 질문에 더 높은 가중치
-      if (qa.assistant) extractKeywords(qa.assistant, keywords, 1);
+      // 새로운 contents 구조에서 answer 추출
+      if (qa.contents) {
+        qa.contents.forEach(item => {
+          if (item.type === CONTENT_TYPES.ANSWER) {
+            extractKeywords(item.content, keywords, 1);
+          }
+        });
+      }
     });
     
     function extractKeywords(text, keywordMap, weight) {
@@ -455,7 +505,7 @@
   function generateMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.0.1';
+    const version = 'v3.1.2';
     
     let markdown = `# ${currentSite.name} 대화 - ${dateStr}\n\n`;
     
@@ -491,20 +541,38 @@
       // Assistant
       markdown += `## 🤖 ${currentSite.name}:\n\n`;
       
-      // Thinking (Claude 전용)
-      if (qa.thinking && qa.thinking.length > 0) {
-        markdown += `### 💭 Thinking:\n\n`;
-        qa.thinking.forEach(thought => {
-          const thinkingLines = thought.split('\n').map(line => '> ' + line).join('\n');
-          markdown += thinkingLines + '\n\n';
+      // 새로운 contents 배열 처리
+      if (qa.contents && qa.contents.length > 0) {
+        let lastWasThinking = false;
+        
+        qa.contents.forEach((item, idx) => {
+          if (item.type === CONTENT_TYPES.THINKING) {
+            markdown += `> ### 💭 Thinking:\n`;
+            const thinkingLines = item.content.split('\n').map(line => '> ' + line).join('\n');
+            markdown += thinkingLines + '\n\n';
+            lastWasThinking = true;
+            
+          } else if (item.type === CONTENT_TYPES.ANSWER) {
+            const threshold = currentSite.extraction?.mergeThreshold || 100;
+            
+            // 길이와 위치에 따라 포맷 결정
+            if (item.content.length > threshold) {
+              // 긴 Answer는 헤딩 포함
+              markdown += `### 💬 Answer:\n\n`;
+              const answerIndented = item.content.split('\n').map(line => '\t' + line).join('\n');
+              markdown += answerIndented + '\n\n';
+              lastWasThinking = false;
+              
+            } else if (lastWasThinking) {
+              // 짧은 Answer가 Thinking 바로 뒤에 오면 인용 블록 안에
+              markdown += `> ${item.content}\n\n`;
+              
+            } else {
+              // 그 외 짧은 Answer는 일반 텍스트로
+              markdown += `${item.content}\n\n`;
+            }
+          }
         });
-      }
-      
-      // Answer
-      if (qa.assistant) {
-        markdown += `### 💬 Answer:\n\n`;
-        const assistantIndented = qa.assistant.split('\n').map(line => '\t' + line).join('\n');
-        markdown += assistantIndented + '\n';
       } else {
         markdown += `\t*(답변 없음)*\n`;
       }
@@ -519,7 +587,7 @@
   function generateQuestionsOnlyMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.0.1';
+    const version = 'v3.1.2';
     
     let markdown = `# ${currentSite.name} 질문 목록 - ${dateStr}\n\n`;
     markdown += `## 📋 요약\n`;
@@ -561,7 +629,7 @@
       // 파일 1: 전체 대화
       const fullBlob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
       const fullUrl = URL.createObjectURL(fullBlob);
-      const fullFilename = `${date}_${safeTitle}_full_v3.0.1.md`;
+      const fullFilename = `${date}_${safeTitle}_full_v3.1.2.md`;
       
       const a1 = document.createElement('a');
       a1.href = fullUrl;
@@ -574,7 +642,7 @@
       setTimeout(() => {
         const questionsBlob = new Blob([questionsMarkdown], { type: 'text/markdown;charset=utf-8' });
         const questionsUrl = URL.createObjectURL(questionsBlob);
-        const questionsFilename = `${date}_${safeTitle}_questions_v3.0.1.md`;
+        const questionsFilename = `${date}_${safeTitle}_questions_v3.1.2.md`;
         
         const a2 = document.createElement('a');
         a2.href = questionsUrl;
