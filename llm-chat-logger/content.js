@@ -1,5 +1,5 @@
 (function() {
-  console.log('🎯 LLM Chat Logger v3.0 - 다중 플랫폼 지원!');
+  console.log('🎯 LLM Chat Logger v3.0.1 - 다중 플랫폼 지원!');
   
   // ===== 전역 변수 =====
   let DEBUG = true;
@@ -52,6 +52,30 @@
     
     // SVG 아이콘 제거
     element.querySelectorAll('svg').forEach(el => el.remove());
+    
+    // 사용자/AI 아바타 제거 (더 포괄적인 선택자)
+    // 1. data-testid="user-message"의 부모 컨테이너에서 첫 번째 div 제거
+    const userMessages = element.querySelectorAll('[data-testid="user-message"]');
+    userMessages.forEach(msg => {
+      const container = msg.closest('.flex.flex-row.gap-2');
+      if (container) {
+        const avatar = container.querySelector('.shrink-0');
+        if (avatar) avatar.remove();
+      }
+    });
+    
+    // 2. 백업: 원형 아바타 직접 제거 (1-2글자 대문자 패턴)
+    element.querySelectorAll('.rounded-full').forEach(el => {
+      if (el.textContent.match(/^[A-Z]{1,2}$/) || el.textContent.match(/^🤖$/)) {
+        // 부모의 shrink-0 컨테이너 전체 제거
+        const shrinkContainer = el.closest('.shrink-0');
+        if (shrinkContainer) {
+          shrinkContainer.remove();
+        } else {
+          el.remove();
+        }
+      }
+    });
     
     // 시간 표시 등 제거
     element.querySelectorAll('.text-text-300').forEach(el => {
@@ -431,7 +455,7 @@
   function generateMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.0';
+    const version = 'v3.0.1';
     
     let markdown = `# ${currentSite.name} 대화 - ${dateStr}\n\n`;
     
@@ -456,9 +480,8 @@
     // Q&A 쌍들
     qaPairs.forEach((qa) => {
       const emoji = classifyMessage(qa.human);
-      const qTitle = qa.human.substring(0, 40).replace(/\n/g, ' ').trim();
       
-      markdown += `# Q${qa.index}. ${qTitle}... ${emoji}\n\n`;
+      markdown += `# Q${qa.index} ${emoji}\n\n`;
       
       // Human
       markdown += `## 👤 Human: ${emoji}\n\n`;
@@ -496,7 +519,7 @@
   function generateQuestionsOnlyMarkdown(qaPairs) {
     const date = new Date();
     const dateStr = date.toLocaleString('ko-KR');
-    const version = 'v3.0';
+    const version = 'v3.0.1';
     
     let markdown = `# ${currentSite.name} 질문 목록 - ${dateStr}\n\n`;
     markdown += `## 📋 요약\n`;
@@ -538,7 +561,7 @@
       // 파일 1: 전체 대화
       const fullBlob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
       const fullUrl = URL.createObjectURL(fullBlob);
-      const fullFilename = `${date}_${safeTitle}_full_v3.0.md`;
+      const fullFilename = `${date}_${safeTitle}_full_v3.0.1.md`;
       
       const a1 = document.createElement('a');
       a1.href = fullUrl;
@@ -551,7 +574,7 @@
       setTimeout(() => {
         const questionsBlob = new Blob([questionsMarkdown], { type: 'text/markdown;charset=utf-8' });
         const questionsUrl = URL.createObjectURL(questionsBlob);
-        const questionsFilename = `${date}_${safeTitle}_questions_v3.0.md`;
+        const questionsFilename = `${date}_${safeTitle}_questions_v3.0.1.md`;
         
         const a2 = document.createElement('a');
         a2.href = questionsUrl;
