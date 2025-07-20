@@ -58,6 +58,68 @@ const SITES = {
       },
       mergeThreshold: 100  // 100자 이하 answer는 thinking에 병합
     }
+  },
+  
+  chatgpt: {
+    name: 'ChatGPT',
+    domain: 'chatgpt.com',
+    
+    // 컨테이너 선택자 (우선순위대로)
+    selectors: [
+      { 
+        type: 'css', 
+        value: '[role="main"]',
+        description: 'ChatGPT 메인 대화 영역'
+      },
+      { 
+        type: 'css', 
+        value: '.flex.h-full.w-full.flex-col',
+        description: 'ChatGPT 대화 컨테이너 대체 선택자'
+      }
+    ],
+    
+    // 메시지 패턴
+    pattern: {
+      type: 'data-testid',  // data-testid 속성 기반
+      messageSelector: '[data-testid^="conversation-turn-"], article',
+      userPattern: 'user',
+      assistantPattern: 'assistant'
+    },
+    
+    // 특수 요소
+    special: {
+      thinking: {
+        // ChatGPT의 thinking 블록 구조 (추후 확인 필요)
+        indicator: '[data-testid*="thinking"]',
+        content: 'div'
+      },
+      codeBlock: 'pre code',
+      table: 'table',
+      copyButton: '[data-testid="copy-turn-action-button"]'
+    },
+    
+    // UI 텍스트 패턴 (제거할 항목)
+    uiPatterns: [
+      /^Copy code$/,
+      /^Copied!$/,
+      /^Share$/,
+      /^Edit$/,
+      /^\d+\/\d+$/,  // 페이지 번호
+      /^ChatGPT$/
+    ],
+    
+    // 콘텐츠 추출 설정
+    extraction: {
+      contentMarkers: {
+        enabled: true,
+        attributes: ['data-start', 'data-end']  // 콘텐츠 위치 마커
+      },
+      codeBlock: {
+        containerSelector: 'pre',
+        codeSelector: 'code',
+        wrapperSelector: '.contain-inline-size'
+      }
+    }
   }
 };
 

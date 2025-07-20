@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Chat Logger (Test)",
+  "version": "1.0.2",
+  "description": "ChatGPT 대화를 자동으로 저장합니다 (테스트 버전)",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "content_scripts": [{
+    "matches": [
+      "https://claude.ai/*",
+      "https://chatgpt.com/*",
+      "https://chat.openai.com/*"
+    ],
+    "js": [
+      "sites.js",
+      "keywords.js",
+      "content.js"
+    ],
+    "run_at": "document_idle"
+  }]
+}
