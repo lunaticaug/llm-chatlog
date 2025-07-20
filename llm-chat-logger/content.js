@@ -2,9 +2,11 @@
   // ===== 버전 정보 =====
   const VERSION = 'v4.0.0';
   const VERSION_DESC = 'Claude + ChatGPT 통합 지원';
-  
+  const MADEBY = '🧠 hmcls';
+
   console.log(`🎯 LLM Chat Logger ${VERSION} - ${VERSION_DESC}!`);
-  
+  console.log(`제작: ${MADEBY}`);
+
   // ===== 전역 변수 =====
   let DEBUG = true;
   let currentSite = null;
