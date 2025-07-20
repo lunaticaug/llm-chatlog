@@ -951,6 +951,7 @@
     const { title, subject, topKeywords, summaryKeywords } = generateTitle(qaPairs);
     
     markdown += `## 📊 대화 요약\n`;
+    markdown += `- **URL**: ${window.location.href}\n`;
     markdown += `- **총 대화**: ${qaPairs.length}세트\n`;
     markdown += `- **주제**: ${subject}\n`;
     if (summaryKeywords.length > 0) {
