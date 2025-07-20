@@ -1,7 +1,7 @@
 (function() {
   // ===== 버전 정보 =====
-  const VERSION = 'v1.0.2';
-  const VERSION_DESC = 'ChatGPT 답변 구조 개선 (thinking/answer 분리)';
+  const VERSION = 'v1.0.4';
+  const VERSION_DESC = '모든 div 개별 처리 (Claude 방식)';
   
   console.log(`🎯 GPT Chat Logger ${VERSION} - ${VERSION_DESC}!`);
   
@@ -426,64 +426,58 @@
     
     // 각 하위 div를 순서대로 처리
     const contentDivs = Array.from(mainContent.children);
+    log(`총 ${contentDivs.length}개의 콘텐츠 div 발견`);
     
     contentDivs.forEach((div, index) => {
-      // div[1]은 장식용 요소이므로 건너뛰기
-      if (index === 0 && div.querySelector('.absolute')) {
+      log(`=== div[${index + 1}] 처리 시작 ===`);
+      
+      // 복제해서 작업
+      const clone = div.cloneNode(true);
+      
+      // UI 요소 제거
+      removeUIElements(clone);
+      
+      // 버튼 영역 제거
+      clone.querySelectorAll('[data-testid$="-action-button"]').forEach(el => el.remove());
+      
+      // 내용을 마크다운으로 변환
+      const content = convertToMarkdownFull(clone).trim();
+      
+      if (!content) {
+        log(`div[${index + 1}] 내용 없음, 건너뛰기`);
         return;
       }
       
-      // Thinking 영역 체크 (보통 두 번째 div)
-      if (div.textContent.includes('동안 생각함') || div.querySelector('[class*="thinking"]')) {
-        const thinkingContent = extractThinkingFromDiv(div);
-        if (thinkingContent) {
-          contents.push({
-            type: CONTENT_TYPES.THINKING,
-            content: thinkingContent
-          });
-        }
+      // 내용 분류
+      if (index === 0 && content.length < 10) {
+        // 짧은 첫 번째 div는 보통 장식용
+        log(`div[1] 장식용 요소로 판단, 건너뛰기`);
+        return;
       }
-      // 일반 답변 영역
+      
+      // Thinking 패턴 확인
+      if (content.includes('동안 생각함') || content.includes('Reasoned for') || 
+          content.includes('thinking') || content.includes('추론')) {
+        log(`div[${index + 1}] Thinking으로 분류`);
+        contents.push({
+          type: CONTENT_TYPES.THINKING,
+          content: content
+        });
+      }
+      // 나머지는 Answer
       else {
-        const answerContent = extractAnswerFromDiv(div);
-        if (answerContent) {
-          contents.push({
-            type: CONTENT_TYPES.ANSWER,
-            content: answerContent
-          });
-        }
+        log(`div[${index + 1}] Answer로 분류`);
+        contents.push({
+          type: CONTENT_TYPES.ANSWER,
+          content: content
+        });
       }
     });
     
+    log(`총 ${contents.length}개의 콘텐츠 추출 완료`);
     return { contents };
   }
   
-  // Thinking 영역 추출
-  function extractThinkingFromDiv(div) {
-    const clone = div.cloneNode(true);
-    removeUIElements(clone);
-    
-    // "X초 동안 생각함" 텍스트만 추출
-    const thinkingText = clone.textContent.trim();
-    if (thinkingText) {
-      return thinkingText;
-    }
-    return null;
-  }
-  
-  // 답변 영역 추출
-  function extractAnswerFromDiv(div) {
-    const clone = div.cloneNode(true);
-    removeUIElements(clone);
-    
-    // 버튼 영역 제거 (div[2]는 보통 버튼 영역)
-    const buttonArea = clone.querySelector('div:nth-child(2)');
-    if (buttonArea && buttonArea.querySelector('button')) {
-      buttonArea.remove();
-    }
-    
-    return convertToMarkdownFull(clone).trim();
-  }
   
   // 테이블을 마크다운으로 변환
   function convertTableToMarkdown(table) {

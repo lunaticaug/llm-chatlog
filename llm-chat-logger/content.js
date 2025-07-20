@@ -1,7 +1,7 @@
 (function() {
   // ===== 버전 정보 =====
-  const VERSION = 'v3.1.11';
-  const VERSION_DESC = '탭 제목 우선 사용 (키워드 추출 폴백)';
+  const VERSION = 'v4.0.0';
+  const VERSION_DESC = 'Claude + ChatGPT 통합 지원';
   
   console.log(`🎯 LLM Chat Logger ${VERSION} - ${VERSION_DESC}!`);
   
@@ -124,6 +124,9 @@
         case 'turn-based':
           qaPairs = extractTurnBased(container);
           break;
+        case 'data-testid':
+          qaPairs = extractDataTestId(container);
+          break;
         default:
           logError('002', `알 수 없는 패턴 타입: ${currentSite.pattern.type}`);
           return [];
@@ -177,6 +180,60 @@
   function extractTurnBased(container) {
     log('Turn-based 추출은 아직 구현되지 않았습니다');
     return [];
+  }
+  
+  // ChatGPT 스타일: data-testid 기반
+  function extractDataTestId(container) {
+    log('=== ChatGPT data-testid 추출 시작 ===');
+    
+    // 모든 메시지 찾기
+    const messages = container.querySelectorAll(currentSite.pattern.messageSelector);
+    log(`총 ${messages.length}개의 메시지 발견`);
+    
+    const qaPairs = [];
+    let currentPair = null;
+    let pairIndex = 1;
+    
+    messages.forEach((message, index) => {
+      const testId = message.getAttribute('data-testid') || '';
+      log(`메시지 ${index}: data-testid="${testId}"`);
+      
+      // .sr-only 태그로 메시지 타입 확인 (h5 또는 h6)
+      const srOnly = message.querySelector(currentSite.pattern.messageIndicator);
+      const messageType = srOnly ? srOnly.textContent.trim() : '';
+      log(`메시지 타입: "${messageType}"`);
+      
+      // 사용자 메시지인지 확인
+      if (messageType === currentSite.pattern.userText) {
+        // 이전 쌍이 있으면 저장
+        if (currentPair && currentPair.contents.length > 0) {
+          qaPairs.push(currentPair);
+        }
+        
+        // 새로운 Q&A 쌍 시작
+        currentPair = {
+          index: pairIndex++,
+          human: extractContent(message, 'human'),
+          contents: []
+        };
+        log(`사용자 메시지 ${currentPair.index} 발견`);
+      }
+      // 어시스턴트 메시지인지 확인
+      else if (messageType === currentSite.pattern.assistantText && currentPair) {
+        // ChatGPT 스타일 콘텐츠 추출
+        const assistantData = extractChatGPTContent(message);
+        currentPair.contents = assistantData.contents;
+        log(`어시스턴트 응답 추가 (${assistantData.contents.length}개 콘텐츠)`);
+      }
+    });
+    
+    // 마지막 쌍 저장
+    if (currentPair && currentPair.contents.length > 0) {
+      qaPairs.push(currentPair);
+    }
+    
+    log(`총 ${qaPairs.length}개의 Q&A 쌍 추출 완료`);
+    return qaPairs;
   }
   
   // ===== 콘텐츠 추출 =====
@@ -352,6 +409,73 @@
         container.remove();
       }
     });
+  }
+  
+  // ===== ChatGPT 콘텐츠 추출 =====
+  function extractChatGPTContent(element) {
+    if (!element) return { contents: [] };
+    
+    const contents = [];
+    
+    // ChatGPT 구조: div/div/div/div/div[1] 내부에 div[1], div[2], div[3]
+    const mainContent = element.querySelector('div > div > div > div > div:first-child');
+    if (!mainContent) {
+      log('ChatGPT 메인 콘텐츠 영역을 찾을 수 없음');
+      return { contents: [] };
+    }
+    
+    // 각 하위 div를 순서대로 처리
+    const contentDivs = Array.from(mainContent.children);
+    log(`총 ${contentDivs.length}개의 콘텐츠 div 발견`);
+    
+    contentDivs.forEach((div, index) => {
+      log(`=== div[${index + 1}] 처리 시작 ===`);
+      
+      // 복제해서 작업
+      const clone = div.cloneNode(true);
+      
+      // UI 요소 제거
+      removeUIElements(clone);
+      
+      // 버튼 영역 제거
+      clone.querySelectorAll('[data-testid$="-action-button"]').forEach(el => el.remove());
+      
+      // 내용을 마크다운으로 변환
+      const content = convertToMarkdownFull(clone).trim();
+      
+      if (!content) {
+        log(`div[${index + 1}] 내용 없음, 건너뛰기`);
+        return;
+      }
+      
+      // 내용 분류
+      if (index === 0 && content.length < 10) {
+        // 짧은 첫 번째 div는 보통 장식용
+        log(`div[1] 장식용 요소로 판단, 건너뛰기`);
+        return;
+      }
+      
+      // Thinking 패턴 확인
+      if (content.includes('동안 생각함') || content.includes('Reasoned for') || 
+          content.includes('thinking') || content.includes('추론')) {
+        log(`div[${index + 1}] Thinking으로 분류`);
+        contents.push({
+          type: CONTENT_TYPES.THINKING,
+          content: content
+        });
+      }
+      // 나머지는 Answer
+      else {
+        log(`div[${index + 1}] Answer로 분류`);
+        contents.push({
+          type: CONTENT_TYPES.ANSWER,
+          content: content
+        });
+      }
+    });
+    
+    log(`총 ${contents.length}개의 콘텐츠 추출 완료`);
+    return { contents };
   }
   
   // ===== v3.1.3 방식 + 마크다운 보존 =====
@@ -629,10 +753,8 @@
             break;
           
           case 'table':
-            // 기본 테이블 처리
-            markdown += '\n';
-            processChildren(node);
-            markdown += '\n';
+            // 테이블을 마크다운으로 변환
+            markdown += '\n' + convertTableToMarkdown(node) + '\n\n';
             break;
           
           case 'div':
@@ -668,6 +790,28 @@
     return markdown;
   }
   
+  // 테이블을 마크다운으로 변환
+  function convertTableToMarkdown(table) {
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) return '';
+    
+    let markdown = '';
+    const headers = Array.from(rows[0].querySelectorAll('th, td')).map(cell => cell.textContent.trim());
+    
+    if (headers.length > 0) {
+      markdown += '| ' + headers.join(' | ') + ' |\n';
+      markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+      
+      for (let i = 1; i < rows.length; i++) {
+        const cells = Array.from(rows[i].querySelectorAll('td')).map(cell => cell.textContent.trim());
+        if (cells.length > 0) {
+          markdown += '| ' + cells.join(' | ') + ' |\n';
+        }
+      }
+    }
+    
+    return markdown.trim();
+  }
   
   // ===== 키워드 추출 =====
   function generateTitle(qaPairs) {

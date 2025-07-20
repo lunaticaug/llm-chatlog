@@ -80,10 +80,11 @@ const SITES = {
     
     // 메시지 패턴
     pattern: {
-      type: 'data-testid',  // data-testid 속성 기반
-      messageSelector: '[data-testid^="conversation-turn-"], article',
-      userPattern: 'user',
-      assistantPattern: 'assistant'
+      type: 'data-testid',
+      messageSelector: '[data-testid^="conversation-turn-"]',
+      messageIndicator: '.sr-only',  // h5 또는 h6 태그
+      userText: '나의 말:',
+      assistantText: 'ChatGPT의 말:'
     },
     
     // 특수 요소

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LLM Chat Logger",
-  "version": "3.0.0",
-  "description": "LLM(Claude, ChatGPT) 대화를 자동으로 저장합니다",
+  "version": "4.0.0",
+  "description": "Claude와 ChatGPT 대화를 마크다운으로 저장합니다",
   "permissions": [
     "storage",
     "downloads"

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GPT Chat Logger (Test)",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "ChatGPT 대화를 자동으로 저장합니다 (테스트 버전)",
   "permissions": [
     "storage",
