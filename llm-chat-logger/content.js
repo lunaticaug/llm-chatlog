@@ -1,7 +1,7 @@
 (function() {
   // ===== 버전 정보 =====
-  const VERSION = 'v4.0.0';
-  const VERSION_DESC = 'Claude + ChatGPT 통합 지원';
+  const VERSION = 'v4.1.1';
+  const VERSION_DESC = 'Claude + ChatGPT 통합 지원 + Artifact 자동 다운로드 (개선)';
   const MADEBY = '🧠 hmcls';
 
   console.log(`🎯 LLM Chat Logger ${VERSION} - ${VERSION_DESC}!`);
@@ -20,6 +20,9 @@
   const CONTENT_TYPES = {
     THINKING: 'thinking',
     ANSWER: 'answer',
+    ARTIFACT: 'artifact',
+    CANVAS: 'canvas',
+    RESEARCH: 'research',
     SEARCH: 'search',     // 향후 확장
     TOOL: 'tool'          // 향후 확장
   };
@@ -162,17 +165,23 @@
       
       // 아바타 제거는 각 추출 함수 내부에서 처리
       
+      // 디버깅을 위한 추가 로그
+      log(`Assistant div ${i + 1} 처리 시작`);
+      log(`Assistant div className: ${assistantDiv.className}`);
+      log(`Assistant div 내 artifact 수: ${assistantDiv.querySelectorAll('.artifact-block-cell').length}`);
+      
       // 새로운 top-down 추출 방식 사용
       const assistantData = extractAssistantContentTopDown(assistantDiv);
       
       const qa = {
         index: Math.floor(i / currentSite.pattern.increment) + 1,
         human: extractContent(humanDiv, 'human'),
-        contents: assistantData.contents
+        contents: assistantData.contents,
+        artifacts: assistantData.artifacts  // artifacts 추가
       };
       
       qaPairs.push(qa);
-      log(`Q${qa.index} 추출 완료`);
+      log(`Q${qa.index} 추출 완료 (${assistantData.artifacts.length}개 artifacts)`);
     }
     
     return qaPairs;
@@ -482,13 +491,39 @@
   
   // ===== v3.1.3 방식 + 마크다운 보존 =====
   function extractAssistantContentTopDown(element) {
-    if (!element) return { contents: [] };
+    if (!element) return { contents: [], artifacts: [] };
     
     const extractConfig = currentSite.extraction;
     const contents = [];
+    const artifacts = [];  // 새로운 배열 추가!
     
     // Phase 1: DOM을 수정하지 않고 노드 수집
     const nodes = [];
+    
+    // 먼저 artifact들을 찾아서 수집
+    if (currentSite.special.artifacts?.enabled) {
+      log(`Artifact 수집 시작. Element: ${element.tagName}, className: ${element.className}`);
+      const artifactElements = element.querySelectorAll(currentSite.special.artifacts.containerSelector);
+      log(`Assistant 메시지 내에서 ${artifactElements.length}개 artifacts 발견`);
+      
+      artifactElements.forEach((artifactEl, idx) => {
+        log(`Artifact ${idx + 1} 처리 중...`);
+        const artifactInfo = extractArtifactInfo(artifactEl);
+        if (artifactInfo) {
+          artifacts.push(artifactInfo);
+          // 본문에 표시할 인디케이터 정보도 저장
+          const indicator = currentSite.special.artifacts.indicatorFormat
+            .replace('{title}', artifactInfo.title);
+          contents.push({
+            type: CONTENT_TYPES.ARTIFACT,
+            content: indicator
+          });
+          log(`Artifact ${idx + 1} 추가됨: ${artifactInfo.title}`);
+        } else {
+          log(`Artifact ${idx + 1} 정보 추출 실패`);
+        }
+      });
+    }
     
     function collectNodes(node, depth = 0) {
       // Thinking 블록 확인
@@ -524,7 +559,7 @@
     
     // DOM 수집
     collectNodes(element);
-    log(`총 ${nodes.length}개 노드 수집됨`);
+    log(`총 ${nodes.length}개 노드 수집됨, ${artifacts.length}개 artifacts 발견`);
     
     // Phase 2: 수집된 노드를 순서대로 처리
     const processedThinking = new Set();
@@ -577,7 +612,45 @@
       }
     });
     
-    return { contents };
+    return { contents, artifacts };
+  }
+  
+  // ===== Artifact 정보 추출 =====
+  function extractArtifactInfo(element) {
+    const artifactConfig = currentSite.special.artifacts;
+    if (!artifactConfig || !artifactConfig.enabled) return null;
+    
+    try {
+      // 제목 추출
+      const titleElement = element.querySelector(artifactConfig.titleSelector);
+      const title = titleElement ? titleElement.textContent.trim() : 'Untitled Artifact';
+      
+      // 서브타이틀 추출
+      const subtitleElement = element.querySelector(artifactConfig.subtitleSelector);
+      const subtitle = subtitleElement ? subtitleElement.textContent.trim() : '';
+      
+      // 고유 ID 생성
+      const id = `artifact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      log(`Artifact 발견: ${title} (${subtitle})`);
+      
+      // 클릭 가능한 버튼 찾기 (artifact-block-cell의 부모)
+      let clickableElement = element.parentElement;
+      while (clickableElement && clickableElement.tagName !== 'BUTTON') {
+        clickableElement = clickableElement.parentElement;
+      }
+      
+      return {
+        id,
+        title,
+        subtitle,
+        element: element,  // artifact-block-cell 자체
+        clickableElement: clickableElement || element.parentElement  // 클릭할 요소
+      };
+    } catch (error) {
+      log('Artifact 정보 추출 실패:', error);
+      return null;
+    }
   }
   
   // ===== Element 타입 식별 =====
@@ -1047,8 +1120,141 @@
     return markdown;
   }
   
+  // ===== Artifact 다운로드 트리거 =====
+  async function downloadArtifacts(artifacts) {
+    if (!artifacts || artifacts.length === 0) return;
+    
+    log(`${artifacts.length}개 artifacts 다운로드 시작`);
+    
+    // 중복 제거 - 같은 제목은 최신 버전만
+    const uniqueArtifacts = {};
+    artifacts.forEach(artifact => {
+      if (!uniqueArtifacts[artifact.title] || 
+          artifacts.indexOf(artifact) > artifacts.indexOf(uniqueArtifacts[artifact.title])) {
+        uniqueArtifacts[artifact.title] = artifact;
+      }
+    });
+    
+    const artifactsToDownload = Object.values(uniqueArtifacts);
+    log(`중복 제거 후 ${artifactsToDownload.length}개 artifacts 다운로드 예정`);
+    
+    for (let i = 0; i < artifactsToDownload.length; i++) {
+      const artifact = artifactsToDownload[i];
+      
+      try {
+        log(`\n=== Artifact ${i + 1}/${artifactsToDownload.length}: ${artifact.title} ===`);
+        
+        // 1. artifact 클릭하여 열기
+        if (artifact.clickableElement) {
+          artifact.clickableElement.click();
+          log(`1. Artifact 열기 클릭 완료`);
+        } else {
+          log(`클릭 요소를 찾을 수 없음, 건너뜀`);
+          continue;
+        }
+        
+        // 열릴 때까지 대기
+        await sleep(1500);
+        
+        // 2. 3점 메뉴 버튼 찾기 (다양한 시도)
+        let menuButton = null;
+        const menuSelectors = [
+          'button[aria-label*="menu"]',
+          'button[aria-label*="Menu"]',
+          'button[aria-label*="메뉴"]',
+          'button.absolute.right-2.top-2', // 위치 기반
+          'button[class*="absolute"][class*="right"]',
+          '[role="button"][aria-label*="options"]'
+        ];
+        
+        for (const selector of menuSelectors) {
+          menuButton = document.querySelector(selector);
+          if (menuButton) {
+            log(`2. 메뉴 버튼 찾음: ${selector}`);
+            break;
+          }
+        }
+        
+        if (!menuButton) {
+          // iframe 내부에서도 시도
+          const iframe = document.querySelector('iframe[title="Claude 콘텐츠"]');
+          if (iframe && iframe.contentDocument) {
+            for (const selector of menuSelectors) {
+              menuButton = iframe.contentDocument.querySelector(selector);
+              if (menuButton) {
+                log(`2. 메뉴 버튼 찾음 (iframe 내부): ${selector}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        if (menuButton) {
+          menuButton.click();
+          log(`3. 메뉴 버튼 클릭 완료`);
+          await sleep(500);
+          
+          // 3. 다운로드 옵션 찾기
+          let downloadLink = null;
+          const downloadSelectors = [
+            'a[href*="download"]',
+            'a:contains("다운로드")',
+            'a:contains("Download")',
+            '[role="menuitem"]:contains("다운로드")',
+            '[role="menuitem"]:contains("Download")'
+          ];
+          
+          for (const selector of downloadSelectors) {
+            try {
+              // jQuery 스타일 :contains 대신 텍스트 검색
+              if (selector.includes(':contains')) {
+                const searchText = selector.match(/:contains\("(.+?)"\)/)[1];
+                const links = document.querySelectorAll('a, [role="menuitem"]');
+                downloadLink = Array.from(links).find(link => 
+                  link.textContent.includes(searchText)
+                );
+              } else {
+                downloadLink = document.querySelector(selector);
+              }
+              
+              if (downloadLink) {
+                log(`4. 다운로드 링크 찾음: ${selector}`);
+                break;
+              }
+            } catch (e) {
+              // 계속 시도
+            }
+          }
+          
+          if (downloadLink) {
+            downloadLink.click();
+            log(`5. 다운로드 시작됨`);
+          } else {
+            log(`다운로드 옵션을 찾을 수 없음`);
+          }
+          
+        } else {
+          log(`메뉴 버튼을 찾을 수 없음`);
+        }
+        
+        // 다음 artifact 처리 전 대기
+        await sleep(2000);
+        
+      } catch (error) {
+        log(`Artifact 다운로드 중 오류:`, error);
+      }
+    }
+    
+    log(`\n=== 모든 Artifact 다운로드 완료 ===`);
+  }
+  
+  // Sleep 헬퍼 함수
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
   // ===== 저장 함수 =====
-  function saveConversation() {
+  async function saveConversation() {
     log('=== 저장 시작 ===');
     
     try {
@@ -1059,6 +1265,16 @@
         alert('대화를 추출할 수 없습니다. 콘솔을 확인하세요.');
         return;
       }
+      
+      // 모든 artifacts 수집
+      const allArtifacts = [];
+      qaPairs.forEach(qa => {
+        if (qa.artifacts && qa.artifacts.length > 0) {
+          allArtifacts.push(...qa.artifacts);
+        }
+      });
+      
+      log(`총 ${allArtifacts.length}개 artifacts 발견`);
       
       // 마크다운 생성
       const { markdown: fullMarkdown, title } = generateMarkdown(qaPairs);
@@ -1098,7 +1314,14 @@
       
       URL.revokeObjectURL(fullUrl);
       
-      showToast(`✅ ${qaPairs.length}개 Q&A 2개 파일로 저장 완료!`);
+      // Artifacts 다운로드 (대화 파일 저장 후)
+      if (allArtifacts.length > 0) {
+        await sleep(200);
+        await downloadArtifacts(allArtifacts);
+      }
+      
+      const artifactMsg = allArtifacts.length > 0 ? ` + ${allArtifacts.length}개 artifacts` : '';
+      showToast(`✅ ${qaPairs.length}개 Q&A 2개 파일로 저장 완료${artifactMsg}!`);
       
     } catch (error) {
       logError('005', '저장 중 오류', error);

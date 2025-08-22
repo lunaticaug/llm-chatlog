@@ -34,7 +34,14 @@ const SITES = {
         expandedText: '사고 과정',
         content: 'p.whitespace-normal'
       },
-      artifacts: '[data-artifact]',
+      artifacts: {
+        enabled: true,
+        containerSelector: '.artifact-block-cell',
+        titleSelector: '.leading-tight.text-sm',
+        subtitleSelector: '.text-sm.text-text-300',
+        iframeSelector: 'iframe[title="Claude 콘텐츠"]',
+        indicatorFormat: '📎 [Artifact: {title}]'
+      },
       citations: 'antml\\:cite'
     },
     
@@ -93,6 +100,17 @@ const SITES = {
         // ChatGPT의 thinking 블록 구조 (추후 확인 필요)
         indicator: '[data-testid*="thinking"]',
         content: 'div'
+      },
+      canvas: {
+        enabled: false,  // TODO: ChatGPT Canvas DOM 구조 확인 후 구현
+        containerSelector: '',
+        titleSelector: '',
+        indicatorFormat: '📎 [Canvas: {title}]'
+      },
+      deepResearch: {
+        enabled: false,  // TODO: Deep Research PDF 처리 구현
+        containerSelector: '',
+        indicatorFormat: '📎 [Research: {title}]'
       },
       codeBlock: 'pre code',
       table: 'table',
